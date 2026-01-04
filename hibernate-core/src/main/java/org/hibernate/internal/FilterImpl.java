@@ -37,9 +37,15 @@ public class FilterImpl implements Filter, Serializable {
 	private @Nullable TreeMap<String,Object> parameters;
 	private final boolean autoEnabled;
 	private final boolean applyToLoadByKey;
+	private transient boolean dirty = true;
 
 	void afterDeserialize(SessionFactoryImplementor factory) {
 		definition = factory.getFilterDefinition( filterName );
+		if ( definition == null ) {
+			throw new HibernateException(
+					"Unknown filter name '" + filterName + "' (no FilterDefinition found in SessionFactory)" );
+		}
+		dirty = true;
 		validate();
 	}
 
@@ -117,6 +123,7 @@ public class FilterImpl implements Filter, Serializable {
 			parameters = new TreeMap<>();
 		}
 		parameters.put( name, argument );
+		dirty = true;
 		return this;
 	}
 
@@ -148,6 +155,7 @@ public class FilterImpl implements Filter, Serializable {
 			parameters = new TreeMap<>();
 		}
 		parameters.put( name, values );
+		dirty = true;
 		return this;
 	}
 
@@ -184,6 +192,15 @@ public class FilterImpl implements Filter, Serializable {
 	 * @throws HibernateException If the state is not currently valid.
 	 */
 	public void validate() throws HibernateException {
+		if ( definition == null ) {
+			throw new HibernateException(
+					"FilterDefinition for filter '" + filterName + "' is not initialized; "
+							+ "was afterDeserialize(SessionFactoryImplementor) called, and does the SessionFactory know this filter?"
+			);
+		}
+		if ( !dirty ) {
+			return;
+		}
 		// for each of the defined parameters, make sure its argument
 		// has been set or a resolver has been implemented and specified
 		for ( final String parameterName : definition.getParameterNames() ) {
@@ -192,6 +209,7 @@ public class FilterImpl implements Filter, Serializable {
 						+ "' has neither an argument nor a resolver" );
 			}
 		}
+		dirty = false;
 	}
 
 	private boolean hasResolver(String parameterName) {
